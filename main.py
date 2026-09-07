@@ -9,9 +9,6 @@ from dotenv import load_dotenv
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
 
-# Google Gemini SDK
-from google import genai
-
 # Google OAuth & Gmail API Client
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -102,12 +99,16 @@ def get_unread_emails(max_results=5):
     return service, extracted_emails
 
 
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_OPENROUTER_MODEL = "openrouter/free"
+
+
 # ============================================================================
-# 2. THINK & 3. DECIDE: Use Gemini to reason about content & make decisions
+# 2. THINK & 3. DECIDE: Use OpenRouter to reason about content & make decisions
 # ============================================================================
-def classify_email(client, email):
+def classify_email(api_key, model, email):
     """
-    Sends email details to Gemini to reason (THINK) and determine (DECIDE)
+    Sends email details to OpenRouter to reason (THINK) and determine (DECIDE)
     the category, priority, and rationale.
     """
     prompt = f"""You are an intelligent email triage AI Agent.
@@ -129,13 +130,22 @@ Return ONLY a valid JSON object (no markdown, no backticks, no explanations) wit
 }}
 """
     # THINK: Model processes and reasons over the prompt
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
-        contents=prompt
+    response = requests.post(
+        OPENROUTER_API_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=60,
     )
+    response.raise_for_status()
 
     # DECIDE: Parse the structured decision from the model output
-    raw_text = response.text.strip()
+    raw_text = response.json()["choices"][0]["message"]["content"].strip()
     if raw_text.startswith("```"):
         raw_text = raw_text.strip("`").removeprefix("json").strip()
 
@@ -242,9 +252,10 @@ def organize_emails_in_gmail(service, classified_emails):
         msg_id = item["email"]["id"]
         category = item["decision"].get("category", "OTHER").upper()
         label_name = f"Agent/{category}"
+        label_key = label_name.upper()
 
         # Step B: Create the Gmail label if it doesn't exist yet
-        if label_name not in label_map:
+        if label_key not in label_map:
             try:
                 new_label = service.users().labels().create(
                     userId="me",
@@ -254,13 +265,12 @@ def organize_emails_in_gmail(service, classified_emails):
                         "messageListVisibility": "show"
                     }
                 ).execute()
-                label_map[label_name] = new_label["id"]
+                label_map[label_key] = new_label["id"]
                 print(f"  [+] Created Gmail label: '{label_name}'")
             except Exception as e:
                 print(f"  [!] Could not create label '{label_name}': {e}")
-                continue
 
-        category_label_id = label_map.get(label_name)
+        category_label_id = label_map.get(label_key)
         modify_body = {"removeLabelIds": ["UNREAD"]}
         if category_label_id:
             modify_body["addLabelIds"] = [category_label_id]
@@ -283,13 +293,14 @@ def main():
     # Load settings from .env file
     load_dotenv()
 
-    gemini_key = os.getenv("GEMINI_API_KEY")
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    openrouter_model = os.getenv("OPENROUTER_MODEL") or DEFAULT_OPENROUTER_MODEL
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
 
-    if not gemini_key or not bot_token or not chat_id:
+    if not openrouter_key or not bot_token or not chat_id:
         print("[!] Error: Missing required keys in .env file.")
-        print("    Make sure GEMINI_API_KEY, TELEGRAM_BOT_TOKEN, and TELEGRAM_CHAT_ID are set.")
+        print("    Make sure OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, and TELEGRAM_CHAT_ID are set.")
         return
 
     print("========================================")
@@ -305,16 +316,13 @@ def main():
         print("Inbox clear! No unread emails to process.")
         return
 
-    # Initialize Gemini client
-    client = genai.Client(api_key=gemini_key)
-
     classified_emails = []
     for email in emails:
         print(f"\nAnalyzing email: \"{email['subject']}\" from {email['sender']}")
 
         # 2. THINK & 3. DECIDE
-        print("  -> [2. THINK & 3. DECIDE] Gemini evaluating category & priority...")
-        decision = classify_email(client, email)
+        print(f"  -> [2. THINK & 3. DECIDE] OpenRouter ({openrouter_model}) evaluating category & priority...")
+        decision = classify_email(openrouter_key, openrouter_model, email)
         print(f"     Category: {decision.get('category')} | Priority: {decision.get('priority')}")
         print(f"     Reason:   {decision.get('reason')}")
 

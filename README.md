@@ -35,7 +35,7 @@ In this project, our agent monitors your Gmail inbox and delivers an executive b
 | Stage | Action in Our Agent | Code Function |
 | :--- | :--- | :--- |
 | **1. OBSERVE** | Agent reads recent unread emails (Subject, Sender, Body) from Gmail. | `get_unread_emails()` |
-| **2. THINK** | Agent feeds email content into Gemini, reasoning about its context and urgency. | `classify_email()` |
+| **2. THINK** | Agent feeds email content into OpenRouter (LLM), reasoning about its context and urgency. | `classify_email()` |
 | **3. DECIDE** | Agent determines the category (`ACTION_REQUIRED`, `MEETING`, etc.) and priority (`HIGH`, `MEDIUM`, `LOW`). | `classify_email()` |
 | **4. ACT** | Agent compiles the briefing and sends a live message to your Telegram chat. | `send_telegram_message()` |
 
@@ -101,16 +101,22 @@ Now open `.env` and fill in your keys (see instructions below for each key).
 
 ## 🔑 API Setup Instructions
 
-### 1. Gemini API Key Setup (Takes 2 minutes)
+### 1. OpenRouter API Key Setup (Takes 2 minutes)
 
-1. Go to [Google AI Studio](https://aistudio.google.com/).
-2. Sign in with your Google account.
-3. Click **Get API Key** and then **Create API Key**.
-4. Copy the generated key.
-5. In your `.env` file, paste it:
+This agent uses [OpenRouter](https://openrouter.ai/) as its LLM provider. OpenRouter gives you access to many models through one API — including **free models** with no credit card required.
+
+1. Go to [OpenRouter](https://openrouter.ai/) and sign up or log in.
+2. Open [openrouter.ai/keys](https://openrouter.ai/keys) and click **Create Key**.
+3. Copy the generated key.
+4. In your `.env` file, paste it:
    ```env
-   GEMINI_API_KEY=your_actual_gemini_key
+   OPENROUTER_API_KEY=your_openrouter_api_key_here
+   OPENROUTER_MODEL=openrouter/free
    ```
+
+**Free models:** The default `openrouter/free` automatically picks an available free model for each request. You can also pin a specific free model (any ID ending in `:free`) — browse options at [openrouter.ai/models?q=free](https://openrouter.ai/models?q=free).
+
+**Free tier limits:** 20 requests/minute; 50 requests/day without purchased credits, or 1,000/day after at least $10 in lifetime credits. This agent processes up to 5 emails per run, so daily limits are usually enough for personal use.
 
 ---
 
@@ -139,7 +145,7 @@ Now open `.env` and fill in your keys (see instructions below for each key).
 
 ### 3. Gmail API Setup (Takes 5 minutes)
 
-Our agent uses Google's official OAuth desktop flow to read unread emails securely.
+Our agent uses Google's official OAuth desktop flow to read unread emails securely. (This is separate from OpenRouter — Gmail access uses Google Cloud OAuth, not an LLM API key.)
 
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
 2. Create a new project (e.g. `Gmail-Agent-Workshop`).
@@ -179,9 +185,25 @@ python main.py
 5. A `token.json` file will be saved locally so you won't need to log in again.
 6. The agent will run its loop:
    - Fetches unread emails.
-   - Prompts Gemini to categorize each email and assign priority.
+   - Prompts OpenRouter to categorize each email and assign priority.
    - Builds an executive brief.
    - Sends the brief directly to your Telegram chat!
+
+---
+
+## ⚙️ GitHub Actions (Optional)
+
+The repo includes a scheduled workflow (`.github/workflows/agent.yml`) that runs the agent every 2 hours. Add these repository secrets:
+
+| Secret | Description |
+| :--- | :--- |
+| `OPENROUTER_API_KEY` | Your OpenRouter API key |
+| `TELEGRAM_BOT_TOKEN` | Bot token from BotFather |
+| `TELEGRAM_CHAT_ID` | Your numeric Telegram chat ID |
+| `GMAIL_CREDENTIALS_JSON` | Full contents of `credentials.json` |
+| `GMAIL_TOKEN_JSON` | Full contents of `token.json` (after first local OAuth login) |
+
+Optionally set `OPENROUTER_MODEL` in the workflow env if you want a specific model instead of the code default (`openrouter/free`).
 
 ---
 
@@ -209,3 +231,4 @@ LOW
 1. **Autonomy vs. Control**: Where does the agent make decisions independently, and where are strict constraints enforced?
 2. **Perception**: What happens if an email contains only an image or a PDF attachment? How would you extend `OBSERVE`?
 3. **Action Safety**: Why did we choose a read-only Gmail scope instead of allowing the agent to automatically delete or send emails?
+4. **Model Choice**: How does switching `OPENROUTER_MODEL` (e.g. `openrouter/free` vs a pinned `:free` model) affect cost, speed, and classification quality?
