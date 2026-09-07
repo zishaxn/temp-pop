@@ -226,22 +226,54 @@ def send_telegram_message(token, chat_id, message_text):
 
 
 # ============================================================================
-# 5. UPDATE ENVIRONMENT: Mark processed emails as read in Gmail
+# 5. UPDATE ENVIRONMENT: Organize emails in Gmail (Apply Labels & Mark Read)
 # ============================================================================
-def mark_emails_as_read(service, email_ids):
+def organize_emails_in_gmail(service, classified_emails):
     """
-    Removes the 'UNREAD' label from the provided list of email IDs.
-    This completes the agent loop by changing the environment state.
+    Creates category labels in Gmail if they don't exist, assigns the matching
+    category label to each email, and removes the 'UNREAD' label.
     """
-    for eid in email_ids:
+    # Step A: Fetch all existing Gmail labels
+    results = service.users().labels().list(userId="me").execute()
+    existing_labels = results.get("labels", [])
+    label_map = {lbl["name"].upper(): lbl["id"] for lbl in existing_labels}
+
+    for item in classified_emails:
+        msg_id = item["email"]["id"]
+        category = item["decision"].get("category", "OTHER").upper()
+        label_name = f"Agent/{category}"
+
+        # Step B: Create the Gmail label if it doesn't exist yet
+        if label_name not in label_map:
+            try:
+                new_label = service.users().labels().create(
+                    userId="me",
+                    body={
+                        "name": label_name,
+                        "labelListVisibility": "labelShow",
+                        "messageListVisibility": "show"
+                    }
+                ).execute()
+                label_map[label_name] = new_label["id"]
+                print(f"  [+] Created Gmail label: '{label_name}'")
+            except Exception as e:
+                print(f"  [!] Could not create label '{label_name}': {e}")
+                continue
+
+        category_label_id = label_map.get(label_name)
+        modify_body = {"removeLabelIds": ["UNREAD"]}
+        if category_label_id:
+            modify_body["addLabelIds"] = [category_label_id]
+
+        # Step C: Update email labels in Gmail
         try:
             service.users().messages().modify(
                 userId="me",
-                id=eid,
-                body={"removeLabelIds": ["UNREAD"]}
+                id=msg_id,
+                body=modify_body
             ).execute()
         except Exception as e:
-            print(f"  [!] Failed to mark email {eid} as read: {e}")
+            print(f"  [!] Failed to organize email {msg_id} in Gmail: {e}")
 
 
 # ============================================================================
@@ -302,10 +334,9 @@ def main():
     print("Message successfully sent to Telegram!")
 
     # 5. UPDATE ENVIRONMENT
-    print("\n[5. UPDATE ENVIRONMENT] Marking processed emails as read...")
-    email_ids = [e["id"] for e in emails]
-    mark_emails_as_read(service, email_ids)
-    print("Emails successfully marked as read!")
+    print("\n[5. UPDATE ENVIRONMENT] Organizing emails in Gmail with labels...")
+    organize_emails_in_gmail(service, classified_emails)
+    print("Emails successfully categorized and marked as read in Gmail!")
 
     print("\n========================================")
     print("          AGENT LOOP COMPLETE           ")
