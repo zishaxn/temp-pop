@@ -41,7 +41,9 @@ def get_unread_emails(max_results=5):
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(credentials_file, GMAIL_SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(
+                credentials_file, GMAIL_SCOPES
+            )
             creds = flow.run_local_server(port=0)
 
         # Save credentials for future runs so we don't have to log in every time
@@ -52,49 +54,67 @@ def get_unread_emails(max_results=5):
     service = build("gmail", "v1", credentials=creds)
 
     # Step D: Query Gmail for unread emails in inbox
-    response = service.users().messages().list(
-        userId="me",
-        q="is:unread",
-        maxResults=max_results
-    ).execute()
+    response = (
+        service.users()
+        .messages()
+        .list(userId="me", q="is:unread", maxResults=max_results)
+        .execute()
+    )
 
     messages = response.get("messages", [])
     extracted_emails = []
 
     for item in messages:
-        msg = service.users().messages().get(
-            userId="me",
-            id=item["id"],
-            format="full"
-        ).execute()
+        msg = (
+            service.users()
+            .messages()
+            .get(userId="me", id=item["id"], format="full")
+            .execute()
+        )
 
         payload = msg.get("payload", {})
         headers = payload.get("headers", [])
 
         # Extract Subject and Sender from headers
-        subject = next((h["value"] for h in headers if h["name"].lower() == "subject"), "(No Subject)")
-        sender = next((h["value"] for h in headers if h["name"].lower() == "from"), "(Unknown Sender)")
+        subject = next(
+            (h["value"] for h in headers if h["name"].lower() == "subject"),
+            "(No Subject)",
+        )
+        sender = next(
+            (h["value"] for h in headers if h["name"].lower() == "from"),
+            "(Unknown Sender)",
+        )
         snippet = msg.get("snippet", "")
 
         # Extract plain text body from email payload parts
         body = ""
         if "data" in payload.get("body", {}):
-            body = base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", errors="ignore")
+            body = base64.urlsafe_b64decode(payload["body"]["data"]).decode(
+                "utf-8", errors="ignore"
+            )
         else:
             for part in payload.get("parts", []):
-                if part.get("mimeType") == "text/plain" and "data" in part.get("body", {}):
-                    body = base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8", errors="ignore")
+                if part.get("mimeType") == "text/plain" and "data" in part.get(
+                    "body", {}
+                ):
+                    body = base64.urlsafe_b64decode(part["body"]["data"]).decode(
+                        "utf-8", errors="ignore"
+                    )
                     break
 
         # Fallback to snippet if body decoding didn't produce text
         body_text = (body if body else snippet).strip()
 
-        extracted_emails.append({
-            "id": item["id"],
-            "subject": subject,
-            "sender": sender,
-            "body": body_text[:1000]  # Limit to first 1000 characters to keep prompt compact
-        })
+        extracted_emails.append(
+            {
+                "id": item["id"],
+                "subject": subject,
+                "sender": sender,
+                "body": body_text[
+                    :1000
+                ],  # Limit to first 1000 characters to keep prompt compact
+            }
+        )
 
     return service, extracted_emails
 
@@ -156,7 +176,7 @@ Return ONLY a valid JSON object (no markdown, no backticks, no explanations) wit
         decision = {
             "category": "ACTION_REQUIRED",
             "priority": "MEDIUM",
-            "reason": "Automated parsing fallback: please review manually."
+            "reason": "Automated parsing fallback: please review manually.",
         }
 
     return decision
@@ -219,18 +239,19 @@ def send_telegram_message(token, chat_id, message_text):
     Sends the generated summary to the user's Telegram chat via HTTP API.
     """
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": message_text
-    }
+    payload = {"chat_id": chat_id, "text": message_text}
     response = requests.post(url, json=payload, timeout=10)
     data = response.json()
     if not data.get("ok"):
         error_desc = data.get("description", "Unknown error")
         if "chat not found" in error_desc.lower():
             print(f"\n[!] Telegram Error: {error_desc}")
-            print("👉 Fix: Open Telegram, search for your bot (e.g. @zishanmailbot), and press 'Start' or send /start.")
-            print("   Telegram bots cannot message you first until you initiate the chat!")
+            print(
+                "👉 Fix: Open Telegram, search for your bot (e.g. @zishanmailbot), and press 'Start' or send /start."
+            )
+            print(
+                "   Telegram bots cannot message you first until you initiate the chat!"
+            )
         raise RuntimeError(f"Telegram API Error: {error_desc}")
     return data
 
@@ -257,14 +278,19 @@ def organize_emails_in_gmail(service, classified_emails):
         # Step B: Create the Gmail label if it doesn't exist yet
         if label_key not in label_map:
             try:
-                new_label = service.users().labels().create(
-                    userId="me",
-                    body={
-                        "name": label_name,
-                        "labelListVisibility": "labelShow",
-                        "messageListVisibility": "show"
-                    }
-                ).execute()
+                new_label = (
+                    service.users()
+                    .labels()
+                    .create(
+                        userId="me",
+                        body={
+                            "name": label_name,
+                            "labelListVisibility": "labelShow",
+                            "messageListVisibility": "show",
+                        },
+                    )
+                    .execute()
+                )
                 label_map[label_key] = new_label["id"]
                 print(f"  [+] Created Gmail label: '{label_name}'")
             except Exception as e:
@@ -278,9 +304,7 @@ def organize_emails_in_gmail(service, classified_emails):
         # Step C: Update email labels in Gmail
         try:
             service.users().messages().modify(
-                userId="me",
-                id=msg_id,
-                body=modify_body
+                userId="me", id=msg_id, body=modify_body
             ).execute()
         except Exception as e:
             print(f"  [!] Failed to organize email {msg_id} in Gmail: {e}")
@@ -300,7 +324,9 @@ def main():
 
     if not openrouter_key or not bot_token or not chat_id:
         print("[!] Error: Missing required keys in .env file.")
-        print("    Make sure OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, and TELEGRAM_CHAT_ID are set.")
+        print(
+            "    Make sure OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, and TELEGRAM_CHAT_ID are set."
+        )
         return
 
     print("========================================")
@@ -321,15 +347,16 @@ def main():
         print(f"\nAnalyzing email: \"{email['subject']}\" from {email['sender']}")
 
         # 2. THINK & 3. DECIDE
-        print(f"  -> [2. THINK & 3. DECIDE] OpenRouter ({openrouter_model}) evaluating category & priority...")
+        print(
+            f"  -> [2. THINK & 3. DECIDE] OpenRouter ({openrouter_model}) evaluating category & priority..."
+        )
         decision = classify_email(openrouter_key, openrouter_model, email)
-        print(f"     Category: {decision.get('category')} | Priority: {decision.get('priority')}")
+        print(
+            f"     Category: {decision.get('category')} | Priority: {decision.get('priority')}"
+        )
         print(f"     Reason:   {decision.get('reason')}")
 
-        classified_emails.append({
-            "email": email,
-            "decision": decision
-        })
+        classified_emails.append({"email": email, "decision": decision})
 
     # Prepare Executive Summary
     summary = build_summary(classified_emails)

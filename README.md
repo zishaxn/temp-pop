@@ -101,71 +101,286 @@ Now open `.env` and fill in your keys (see instructions below for each key).
 
 ## 🔑 API Setup Instructions
 
-### 1. OpenRouter API Key Setup (Takes 2 minutes)
+Complete **all three sections below** before running the agent. Each service needs its own credentials. Work through them in order — OpenRouter and Telegram can be done on your phone or browser; Gmail setup uses Google Cloud Console.
 
-This agent uses [OpenRouter](https://openrouter.ai/) as its LLM provider. OpenRouter gives you access to many models through one API — including **free models** with no credit card required.
+### Setup checklist (complete before first run)
 
-1. Go to [OpenRouter](https://openrouter.ai/) and sign up or log in.
-2. Open [openrouter.ai/keys](https://openrouter.ai/keys) and click **Create Key**.
-3. Copy the generated key.
-4. In your `.env` file, paste it:
+- [ ] OpenRouter account created and `OPENROUTER_API_KEY` added to `.env`
+- [ ] Telegram bot created via BotFather and `TELEGRAM_BOT_TOKEN` added to `.env`
+- [ ] Your Telegram **Chat ID** copied and `TELEGRAM_CHAT_ID` added to `.env`
+- [ ] You have opened your bot in Telegram and pressed **Start** (or sent `/start`) — **required**
+- [ ] Google Cloud project created and Gmail API enabled
+- [ ] OAuth consent screen configured and your Gmail added as a **Test user**
+- [ ] OAuth Desktop credentials downloaded as `credentials.json` in the project folder
+- [ ] `.env` file saved with all values filled in
+
+---
+
+### 1. OpenRouter API Key Setup (~5 minutes)
+
+This agent uses [OpenRouter](https://openrouter.ai/) as its LLM provider. OpenRouter routes requests to many AI models through one API — including **free models**, so you can run this project without paying.
+
+#### Step 1: Create an OpenRouter account
+
+1. Open [https://openrouter.ai/](https://openrouter.ai/) in your browser.
+2. Click **Sign In** (top right).
+3. Sign up with Google, GitHub, or email — whichever you prefer.
+4. If prompted, verify your email address before continuing.
+
+#### Step 2: Create an API key
+
+1. Go to [https://openrouter.ai/keys](https://openrouter.ai/keys).
+2. Click **Create Key** (or **Create API Key**).
+3. Give the key a name you will recognize later (e.g. `gmail-inbox-agent`).
+4. Click **Create**.
+5. **Copy the key immediately** — it usually starts with `sk-or-v1-...`. You may not be able to view the full key again after closing the dialog.
+
+#### Step 3: Add the key to your `.env` file
+
+1. Open the `.env` file in your project folder (create it from `.env.example` if you have not already).
+2. Find the line `OPENROUTER_API_KEY=` and paste your key after the `=`:
    ```env
-   OPENROUTER_API_KEY=your_openrouter_api_key_here
+   OPENROUTER_API_KEY=sk-or-v1-your_actual_key_here
+   ```
+3. Set the model line (free tier — recommended for this project):
+   ```env
    OPENROUTER_MODEL=openrouter/free
    ```
+4. Save the file.
 
-**Free models:** The default `openrouter/free` automatically picks an available free model for each request. You can also pin a specific free model (any ID ending in `:free`) — browse options at [openrouter.ai/models?q=free](https://openrouter.ai/models?q=free).
+#### Free models and limits
 
-**Free tier limits:** 20 requests/minute; 50 requests/day without purchased credits, or 1,000/day after at least $10 in lifetime credits. This agent processes up to 5 emails per run, so daily limits are usually enough for personal use.
+| Setting | What it does |
+| :--- | :--- |
+| `openrouter/free` | OpenRouter automatically picks an available free model for each request. **Recommended default.** |
+| `provider/model-name:free` | Pin one specific free model (e.g. `meta-llama/llama-3.3-70b-instruct:free`). Browse at [openrouter.ai/models?q=free](https://openrouter.ai/models?q=free). |
 
----
+**Free tier limits (OpenRouter):**
 
-### 2. Telegram Bot Setup (Takes 3 minutes)
+- **20 requests per minute**
+- **50 requests per day** if you have not purchased credits
+- **1,000 requests per day** after at least $10 in lifetime credit purchases
 
-#### A. Create your Bot:
-1. Open Telegram and search for `@BotFather`.
-2. Click **Start** or send `/start`.
-3. Send `/newbot` and follow the prompts to choose a name and username for your bot.
-4. BotFather will give you an **API Token** (e.g. `7123456789:AAF...`).
-5. In your `.env` file:
-   ```env
-   TELEGRAM_BOT_TOKEN=your_token_from_botfather
-   ```
+This agent classifies up to **5 emails per run**, so daily limits are usually enough for personal or workshop use.
 
-#### B. Get your Chat ID:
-1. In Telegram, search for `@userinfobot` or `@raw_data_bot` and click **Start**.
-2. It will reply with your numeric **Id** (e.g., `123456789`).
-3. Now search for your *own new bot* that you created in step A and click **Start** (this allows the bot to message you).
-4. In your `.env` file:
-   ```env
-   TELEGRAM_CHAT_ID=your_numeric_chat_id
-   ```
+#### Troubleshooting OpenRouter
+
+| Problem | Fix |
+| :--- | :--- |
+| `401 Unauthorized` | Key is wrong or missing — check `OPENROUTER_API_KEY` in `.env` with no extra spaces or quotes. |
+| `429 Too Many Requests` | Free rate limit hit — wait a minute and try again, or switch to another `:free` model. |
+| Empty or bad JSON from the model | Free models vary in quality; try pinning a different `:free` model in `OPENROUTER_MODEL`. |
 
 ---
 
-### 3. Gmail API Setup (Takes 5 minutes)
+### 2. Telegram Bot Setup (~10 minutes)
 
-Our agent uses Google's official OAuth desktop flow to read unread emails securely. (This is separate from OpenRouter — Gmail access uses Google Cloud OAuth, not an LLM API key.)
+The agent sends your inbox brief to Telegram. You need **two values**: a bot token (from BotFather) and your personal chat ID.
 
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a new project (e.g. `Gmail-Agent-Workshop`).
-3. Enable the Gmail API:
-   - Navigate to **APIs & Services** > **Library**.
-   - Search for **Gmail API** and click **Enable**.
-4. Configure the OAuth Consent Screen:
-   - Go to **APIs & Services** > **OAuth consent screen**.
-   - Choose **External** and click **Create**.
-   - Fill in an App name (e.g. `Gmail Agent`) and your email address. Click **Save and Continue**.
-   - Under **Test Users**, add your personal Gmail address (the one you want the agent to read).
-5. Create OAuth Credentials:
-   - Go to **APIs & Services** > **Credentials**.
-   - Click **Create Credentials** > **OAuth client ID**.
-   - Application type: **Desktop app**.
-   - Name: `Gmail Agent Desktop`.
+> **Important — read this before running the agent**
+>
+> Telegram bots **cannot message you first**. You must open a chat with your bot and press **Start** (or send `/start`) **before** the agent runs. If you skip this step, you will see an error like `chat not found` when the script tries to send the briefing.
+
+#### Step 1: Create your bot with BotFather
+
+1. Open the **Telegram** app (mobile or desktop).
+2. In the search bar, type **`@BotFather`** and open the official bot (blue verified checkmark).
+3. Tap **Start** or send:
+   ```
+   /start
+   ```
+4. Send:
+   ```
+   /newbot
+   ```
+5. BotFather asks for a **display name** — this is what users see in chats (e.g. `My Gmail Agent`).
+6. BotFather asks for a **username** — must end in `bot` (e.g. `zishan_gmail_agent_bot`). If the name is taken, try another.
+7. BotFather replies with a message containing your **HTTP API token**, for example:
+   ```
+   7123456789:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+8. Copy that entire token.
+
+#### Step 2: Save the bot token in `.env`
+
+1. Open your `.env` file.
+2. Set:
+   ```env
+   TELEGRAM_BOT_TOKEN=7123456789:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+   (Replace with your real token — no quotes, no spaces.)
+3. Save the file.
+
+**Keep this token private.** Anyone with it can control your bot.
+
+#### Step 3: Get your Telegram Chat ID
+
+Your chat ID is a numeric ID for *you* (not the bot). The agent uses it to know where to send messages.
+
+1. In Telegram, search for **`@userinfobot`** or **`@raw_data_bot`**.
+2. Open the bot and tap **Start** (or send `/start`).
+3. The bot replies with your user information. Find the line labeled **Id** (or **Chat Id**) — a number like `123456789`.
+4. Copy that number.
+
+#### Step 4: Save your Chat ID in `.env`
+
+1. Open your `.env` file.
+2. Set:
+   ```env
+   TELEGRAM_CHAT_ID=123456789
+   ```
+   (Use your actual numeric ID — no quotes.)
+3. Save the file.
+
+#### Step 5: Start a conversation with **your** bot (required)
+
+This step is easy to miss but **mandatory**:
+
+1. In Telegram search, type the **username** of the bot you created (e.g. `@zishan_gmail_agent_bot`).
+2. Open the chat with your bot.
+3. Tap **Start** at the bottom **or** send:
+   ```
+   /start
+   ```
+4. You should see a welcome message from the bot (or an empty chat — that is fine). What matters is that **you** initiated the conversation.
+
+Until you do this, Telegram blocks the agent from sending you messages.
+
+#### Troubleshooting Telegram
+
+| Problem | Fix |
+| :--- | :--- |
+| `chat not found` | Open your bot in Telegram and press **Start** / send `/start`, then run the agent again. |
+| `Unauthorized` / `401` | `TELEGRAM_BOT_TOKEN` is wrong — copy the token again from BotFather (`/mybots` → your bot → **API Token**). |
+| Bot never sends messages | Confirm `TELEGRAM_CHAT_ID` is **your** user ID from `@userinfobot`, not the bot's ID. |
+| Wrong chat receives messages | You used someone else's chat ID — re-copy your own Id from `@userinfobot`. |
+
+---
+
+### 3. Gmail API & Google Cloud Setup (~15 minutes)
+
+The agent reads unread emails from Gmail using Google's official OAuth flow. This is **separate from OpenRouter** — Gmail access uses Google Cloud credentials, not an OpenRouter key.
+
+You will:
+
+1. Create a Google Cloud project
+2. Enable the Gmail API
+3. Configure the OAuth consent screen and add yourself as a **Test user**
+4. Create Desktop OAuth credentials and download `credentials.json`
+
+#### Step 1: Open Google Cloud Console and create a project
+
+1. Go to [https://console.cloud.google.com/](https://console.cloud.google.com/).
+2. Sign in with the **Google account whose Gmail inbox** you want the agent to read.
+3. At the top of the page, click the **project dropdown** (next to "Google Cloud").
+4. Click **New Project**.
+5. Enter a project name (e.g. `Gmail-Agent-Workshop`).
+6. Click **Create**.
+7. Wait a few seconds, then **select your new project** from the project dropdown at the top so it is active.
+
+#### Step 2: Enable the Gmail API
+
+1. With your project selected, open the left menu (**☰**).
+2. Go to **APIs & Services** → **Library**.
+3. In the search box, type **Gmail API**.
+4. Click **Gmail API** in the results.
+5. Click **Enable**.
+6. Wait until the API shows as enabled (you may land on the API overview page).
+
+#### Step 3: Configure the OAuth consent screen
+
+While your app is in **Testing** mode, only accounts listed as **Test users** can sign in.
+
+1. Open the left menu (**☰**).
+2. Go to **APIs & Services** → **OAuth consent screen**.
+3. Choose **User Type**:
+   - Select **External** (works for personal Gmail accounts).
    - Click **Create**.
-6. Download Credentials JSON:
-   - Click the download icon (⬇️) next to your newly created OAuth Client ID.
-   - Rename the downloaded file to `credentials.json` and place it inside the project directory.
+4. **App information** (page 1):
+   - **App name:** e.g. `Gmail Inbox Agent`
+   - **User support email:** select your email from the dropdown
+   - **Developer contact email:** enter your email
+   - Click **Save and Continue**
+5. **Scopes** (page 2):
+   - Click **Save and Continue** (default scopes are fine for now; the app requests Gmail access at login time).
+6. **Test users** (page 3) — **do not skip this**:
+   - Scroll to the **Test users** section.
+   - Click **+ Add Users**.
+   - Enter the **exact Gmail address** you will use when the agent logs in (e.g. `you@gmail.com`).
+   - Click **Add**.
+   - Confirm your email appears in the Test users list.
+   - Click **Save and Continue**
+7. **Summary** (page 4):
+   - Review and click **Back to Dashboard**.
+
+> If you try to log in with a Gmail account that is **not** listed under Test users, Google will block access with an error like *"Access blocked: app has not completed Google verification"* or *"Error 403: access_denied"*.
+
+#### Step 4: Create OAuth Desktop credentials
+
+1. Go to **APIs & Services** → **Credentials**.
+2. Click **+ Create Credentials** at the top.
+3. Select **OAuth client ID**.
+4. If asked to configure the consent screen first, you already did — continue.
+5. **Application type:** choose **Desktop app**.
+6. **Name:** e.g. `Gmail Agent Desktop`.
+7. Click **Create**.
+8. A dialog shows your **Client ID**. Click **OK** (you do not need to copy these separately — they are in the JSON file next).
+
+#### Step 5: Download `credentials.json`
+
+1. On the **Credentials** page, find your new OAuth 2.0 Client ID under **OAuth 2.0 Client IDs**.
+2. Click the **Download** icon (⬇️) on the right side of that row.
+3. A JSON file downloads (often named something like `client_secret_....json`).
+4. **Rename** the file to exactly:
+   ```
+   credentials.json
+   ```
+5. **Move** `credentials.json` into your project folder (same folder as `main.py`).
+
+Your project folder should now contain:
+
+```text
+project/
+├── main.py
+├── credentials.json    ← you added this
+├── .env
+└── ...
+```
+
+#### Step 6: Point `.env` at your credentials file (optional)
+
+By default the agent looks for `credentials.json` in the project root. If you use a different path or filename, set:
+
+```env
+GMAIL_CREDENTIALS_FILE=credentials.json
+```
+
+Save `.env` when done.
+
+#### What happens on first Gmail login
+
+The first time you run `python main.py`:
+
+1. A **browser window opens** automatically.
+2. Choose the **same Google account** you added as a Test user.
+3. Google may show **"Google hasn't verified this app"** — this is normal for personal development projects:
+   - Click **Advanced**
+   - Click **Go to Gmail Inbox Agent (unsafe)** (wording may vary slightly)
+4. Review permissions and click **Allow** / **Continue**.
+5. You may see *"The authentication flow has completed"* in the browser — you can close it.
+6. The script creates **`token.json`** in your project folder. This stores your refresh token so you **do not need to log in through the browser on every run**.
+
+**Do not commit `credentials.json` or `token.json` to git** — they grant access to your Gmail.
+
+#### Troubleshooting Gmail
+
+| Problem | Fix |
+| :--- | :--- |
+| `Access blocked` / `403 access_denied` | Add your Gmail under **OAuth consent screen → Test users** (see Step 3 above). |
+| Browser does not open | Run `python main.py` from a normal terminal (not a restricted sandbox). On headless servers, complete OAuth locally first and copy `token.json`. |
+| `credentials.json` not found | File must be in the project folder or path set in `GMAIL_CREDENTIALS_FILE`. |
+| Wrong inbox is read | Log out in browser or delete `token.json` and run again, signing in with the correct Test user account. |
+| `token.json` expired issues | Delete `token.json` and run again to re-authenticate. |
 
 ---
 
@@ -177,19 +392,27 @@ Run the script:
 python main.py
 ```
 
-### What to Expect on First Run:
-1. A browser window will open automatically asking you to log in to your Google Account.
-2. Select the Gmail account you added as a test user.
-3. If you see an *"Unverified app"* warning, click **Advanced** -> **Go to Gmail Agent (unsafe)**. This is normal for development apps created in your own Google Cloud account.
-4. Allow read-only access.
-5. A `token.json` file will be saved locally so you won't need to log in again.
-6. The agent will run its loop:
-   - Fetches unread emails.
-   - Prompts OpenRouter to categorize each email and assign priority.
-   - Builds an executive brief.
-   - Sends the brief directly to your Telegram chat!
+### What to Expect on First Run
 
----
+Make sure you completed the [setup checklist](#setup-checklist-complete-before-first-run) — especially **Telegram `/start`** and **Gmail Test users**.
+
+1. Run:
+   ```bash
+   python main.py
+   ```
+2. A browser window opens for **Google sign-in** (first run only, unless `token.json` already exists).
+3. Select the Gmail account you added as a **Test user**.
+4. If you see *"Google hasn't verified this app"*, click **Advanced** → **Go to Gmail Inbox Agent (unsafe)**. This is normal for personal development apps.
+5. Click **Allow** to grant Gmail access. The agent can read emails, apply labels, and mark messages as read.
+6. A `token.json` file is saved locally — future runs skip the browser login.
+7. The agent runs its loop:
+   - Fetches up to 5 unread emails from Gmail
+   - Sends each to OpenRouter for category and priority
+   - Builds an executive brief
+   - Sends the brief to your Telegram chat (you must have pressed **Start** on your bot first)
+   - Applies Gmail labels and marks processed emails as read
+
+If Telegram fails with **`chat not found`**, open your bot and send `/start`, then run `python main.py` again.
 
 ## ⚙️ GitHub Actions (Optional)
 
